@@ -57,6 +57,14 @@
 /* External variables --------------------------------------------------------*/
 extern TIM_HandleTypeDef htim1;
 /* USER CODE BEGIN EV */
+volatile uint16_t pwm_duty = 120;
+uint16_t target_speed = 100;
+volatile uint16_t current_speed = 120;
+volatile uint32_t last_time = 0;
+volatile float integral = 0.0f, last_error = 0.0f;
+volatile float kp = 0.1f,kd =0.1f,ki = 0.1f;
+const uint16_t max_integral = 1000;
+const uint16_t min_integral = -1000;
 
 /* USER CODE END EV */
 
@@ -205,6 +213,98 @@ void EXTI9_5_IRQHandler(void)
 {
   /* USER CODE BEGIN EXTI9_5_IRQn 0 */
 
+	uint32_t now = HAL_GetTick();
+	float dt = (now - last_time) / 1000.0f;
+	last_time = now;
+	float error = target_speed - current_speed;
+
+	integral += error * dt;
+	if (integral > max_integral) integral = max_integral;
+	if (integral < min_integral) integral = min_integral;
+	float derivative = (error-last_error)*dt;
+	kp = 0.5f + 0.01f * error;
+	ki = 0.05f * (1.0f - 0.9f * derivative);
+	kd = 0.1f + 0.01f * derivative;
+	pwm_duty = (int)(kp * error + ki * integral + kd * derivative);
+	if (pwm_duty > 800) pwm_duty = 800;
+	if (pwm_duty < 0) pwm_duty = 0;
+	last_error = error;
+	uint8_t hall_state = (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_7) << 2) |
+						 (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_8) << 1) |
+						 (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_9) << 0);
+	//assume that in the h bridge layout, turning on the gpio pin associates with reversing coil polarity
+	switch (hall_state){
+		case 0b101:
+			HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_SET);
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, pwm_duty);
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 0);
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 0);
+
+			break;
+		case 0b100:
+			HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_RESET);
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, pwm_duty);
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 0);
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 0);
+			break;
+		case 0b110:
+			HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_SET);
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0);
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, pwm_duty);
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, pwm_duty);
+
+			break;
+		case 0b010:
+			HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_SET);
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, pwm_duty);
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 0);
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 0);
+			break;
+		case 0b011:
+			HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_SET);
+			HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_SET);
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, pwm_duty);
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, pwm_duty);
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, pwm_duty);
+			break;
+		case 0b001:
+			HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET);
+			HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_RESET);
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0);
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, pwm_duty);
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, pwm_duty);
+			break;
+		default:
+			 __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0);
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 0);
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 0);
+			HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_RESET);
+			//invalid phase, just turn off for now and momentum might fix it.
+	}
+	// Check which EXTI line caused the interrupt
+	if (__HAL_GPIO_EXTI_GET_IT(GPIO_PIN_7) != RESET)
+	{
+
+		__HAL_GPIO_EXTI_CLEAR_IT(GPIO_PIN_7);
+		// Handle Hall sensor on pin 7
+	}
+
+	if (__HAL_GPIO_EXTI_GET_IT(GPIO_PIN_8) != RESET)
+	{
+
+		__HAL_GPIO_EXTI_CLEAR_IT(GPIO_PIN_8);
+		// Handle Hall sensor on pin 8
+	}
+
+	if (__HAL_GPIO_EXTI_GET_IT(GPIO_PIN_9) != RESET)
+	{
+		__HAL_GPIO_EXTI_CLEAR_IT(GPIO_PIN_9);
+		// Handle Hall sensor on pin 9
+	}
   /* USER CODE END EXTI9_5_IRQn 0 */
   HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_7);
   HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_8);

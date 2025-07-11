@@ -56,9 +56,8 @@ static void MX_TIM1_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-volatile uint16_t pwm_A = 0;
-volatile uint16_t pwm_B = 0;
-volatile uint16_t pwm_C = 0;
+
+
 
 /* USER CODE END 0 */
 
@@ -93,6 +92,7 @@ int main(void)
   MX_GPIO_Init();
   MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
+  uint32_t lastPrintTime = 0;
   //used to start the motor, gets it moving so the interrupts can start firing
   /* USER CODE END 2 */
 
@@ -101,7 +101,15 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
+	  //code for PID here
+	  uint32_t now = HAL_GetTick();
+	  if (now - lastPrintTime >= 500)  // print every 500 ms
+	  {
+		  lastPrintTime = now;
 
+		  // Assuming you have a printf or UART print function:
+		  //printf("Speed: %.2f Hz\r\n", current_speed);
+	  }
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
@@ -275,85 +283,7 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-void EXTI9_5_IRQHandler(void)
-{
-	uint8_t hall_state = (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_7) << 2) |
-	                     (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_8) << 1) |
-	                     (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_9) << 0);
-	//assume that in the h bridge layout, turning on the gpio pin associates with reversing coil polarity
-	switch (hall_state){
-		case 0b101:
-			HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_SET);
-			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 120);
-			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 0);
-			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 0);
 
-			break;
-	    case 0b100:
-	    	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_RESET);
-	    	__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 120);
-	    	__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 0);
-	    	__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 0);
-			break;
-	    case 0b110:
-	    	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET);
-			HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_SET);
-			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0);
-			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 120);
-			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 120);
-
-			break;
-	    case 0b010:
-	    	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_SET);
-	    	__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 120);
-	    	__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 0);
-	    	__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 0);
-			break;
-	    case 0b011:
-	    	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_SET);
-	    	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET);
-	    	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_SET);
-			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 120);
-			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 120);
-			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 120);
-			break;
-	    case 0b001:
-			HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET);
-			HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_RESET);
-			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0);
-			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 120);
-			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 120);
-			break;
-	    default:
-	    	 __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0);
-			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 0);
-			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 0);
-			HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_RESET);
-			HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET);
-			HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_RESET);
-			//invalid phase, just turn off for now and momentum might fix it.
-	}
-    // Check which EXTI line caused the interrupt
-    if (__HAL_GPIO_EXTI_GET_IT(GPIO_PIN_7) != RESET)
-    {
-
-        __HAL_GPIO_EXTI_CLEAR_IT(GPIO_PIN_7);
-        // Handle Hall sensor on pin 7
-    }
-
-    if (__HAL_GPIO_EXTI_GET_IT(GPIO_PIN_8) != RESET)
-    {
-
-        __HAL_GPIO_EXTI_CLEAR_IT(GPIO_PIN_8);
-        // Handle Hall sensor on pin 8
-    }
-
-    if (__HAL_GPIO_EXTI_GET_IT(GPIO_PIN_9) != RESET)
-    {
-        __HAL_GPIO_EXTI_CLEAR_IT(GPIO_PIN_9);
-        // Handle Hall sensor on pin 9
-    }
-}
 
 /* USER CODE END 4 */
 
